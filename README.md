@@ -102,6 +102,17 @@ Clone the repository and run the `dotnet` command in the Spacetime project folde
 dotnet build -t:Run -f net6.0-maccatalyst
 ```
 
+**Common issues**
+
+Find files with extended attributes:
+```
+xattr -lr {/path/to/spacetime}/src/Spacetime/bin/Debug/net6.0-maccatalyst/maccatalyst-x64/Spacetime.app
+```
+Clean up extended attributes from files. In the 
+```
+xattr -rc .
+```
+
 **Installer*
 [TBD](https://github.com/spacetimedotnet/spacetime/issues/5)
 

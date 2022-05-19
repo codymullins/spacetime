@@ -15,7 +15,7 @@
 		<ApplicationTitle>Spacetime</ApplicationTitle>
 
 		<!-- App Identifier -->
-		<ApplicationId>com.companyname.spacetime</ApplicationId>
+		<ApplicationId>com.spacetime.client</ApplicationId>
 
 		<!-- Versions -->
 		<ApplicationVersion>1</ApplicationVersion>
