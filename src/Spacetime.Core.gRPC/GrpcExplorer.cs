@@ -1,44 +1,32 @@
 ﻿using System.Diagnostics;
 using System.Text.Json;
-using DynamicGrpc;
-using Google.Protobuf;
-using Google.Protobuf.Reflection;
 using Grpc.Net.Client;
 using Microsoft.Extensions.Logging;
-using Spacetime.gRPC.Wrapper;
-using Spacetime.Core.Infrastructure;
+using Spacetime.Core.gRPC.Dynamic;
+using Spacetime.Core.gRPC.Interfaces;
 
 namespace Spacetime.Core.gRPC
 {
     public class GrpcExplorer : IGrpcExplorer
     {
         private readonly ILogger<GrpcExplorer> _log;
-        public GrpcExplorer(ILogger<GrpcExplorer> log)
+        private readonly IDynamicGrpcFactory _factory;
+
+        public GrpcExplorer(ILogger<GrpcExplorer> log, IDynamicGrpcFactory factory)
         {
             _log = log;
+            _factory = factory;
         }
 
-        public GrpcExploreResult GetExplorer(string importPath, string protoFileName)
-        {
-            var explorer = new GrpcExploreResult();
-            explorer.Services = ListServices(importPath, protoFileName).Select(p => new GrpcServiceDefinition { Name = p }).ToList();
-            foreach (var svc in explorer.Services)
-            {
-                svc.Methods = ListMethods(importPath, protoFileName, svc.Name).Select(p => new GrpcMethodDefinition { Name = p }).ToList();
-            }
-
-            return explorer;
-        }
-
-        public async Task<SpacetimeResponse> Invoke(string host, string service, string method, string json)
+        public async Task<GrpcResponse> Invoke(string host, string service, string method, string json)
         {
             _log.LogInformation("Invoking service {host}, {service}, {method}", host, service, method);
-            var response = new SpacetimeResponse {Status = SpacetimeStatus.Active};
+            var response = new GrpcResponse() {Status = GrpcStatus.Active};
             Stopwatch stopwatch = null;
             try
             {
                 using var channel = GrpcChannel.ForAddress(host);
-                var client = await DynamicGrpcClient.FromServerReflection(channel);
+                var client = await _factory.FromServerReflection(channel);
 
                 var parameters = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
 
@@ -49,7 +37,7 @@ namespace Spacetime.Core.gRPC
 
                 var resultJson = JsonSerializer.Serialize(result);
 
-                response.Status = SpacetimeStatus.Ok;
+                response.Status = GrpcStatus.Ok;
                 response.ResponseBody = resultJson;
                 response.ElapsedMs = stopwatch.ElapsedMilliseconds;
             }
@@ -58,25 +46,25 @@ namespace Spacetime.Core.gRPC
                 _log.LogError(ex, "Failed to invoke service {host}, {service}, {method}", host, service, method);
 
                 response.ResponseBody = ex.Message;
-                response.Status = SpacetimeStatus.Error;
+                response.Status = GrpcStatus.Error;
                 response.ElapsedMs = stopwatch?.ElapsedMilliseconds ?? -1;
             }
 
             return response;
         }
 
-        public IEnumerable<string> ListServices(string importPath, string protoFileName)
+        public async Task<GrpcExploreResult> Explore(string host)
         {
-            var curl = new GRPCurl();
-            var result = curl.ListServices(importPath, protoFileName);
-            return result.Items.Select(p => p.Name);
-        }
+            using var channel = GrpcChannel.ForAddress(host);
+            var client = await _factory.FromServerReflection(channel);
+            var result = await client.Explore();
 
-        public IEnumerable<string> ListMethods(string importPath, string protoFileName, string svc)
-        {
-            var curl = new GRPCurl();
-            var result = curl.ListMethods(importPath, protoFileName, svc);
-            return result.Items.Select(p => p.Name);
+            // the .NET server reflection for gRPC shows up as a service
+            // named ServerReflection - remove this from the list to avoid clutter
+            result.Services = result.Services
+                .Where(p => !p.Name.Equals("ServerReflection", StringComparison.OrdinalIgnoreCase)).ToList();
+            
+            return result;
         }
     }
 }

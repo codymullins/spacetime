@@ -1,0 +1,119 @@
+﻿@inherits Fluxor.Blazor.Web.Components.FluxorComponent
+
+@using Fluxor
+@using Spacetime.Blazor.gRPC.Store
+@using System.Diagnostics
+@inject IProtobufService ProtobufService
+@inject IDialogService DialogService
+@inject IGrpcExplorer GrpcExplorer
+@inject ISnackbar Snackbar
+@inject IDispatcher Dispatcher
+
+<MudGrid Class="d-flex flex-grow-1">
+    <MudItem xs="12" Class="d-flex flex-column">
+        <MudGrid Class="d-flex">
+            <MudItem xs="3">
+                <MudTextField Margin="Margin.Dense"
+                              Label="Service"
+                              Value="Service?.Name"
+                              Placeholder="Service"
+                              Variant="Variant.Outlined"
+                              Class="my-4"/>
+                <MudTextField Margin="Margin.Dense"
+                              Label="Method"
+                              Value="Method?.Name"
+                              Placeholder="Method"
+                              Variant="Variant.Outlined"/>
+            </MudItem>
+            <MudItem xs="3">
+                <MudTextField Margin="Margin.Dense"
+                              Class="my-4"
+                              @bind-Value="URL"
+                              Label="Host"
+                              Placeholder="http://localhost:8080"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.End" AdornmentIcon="@Icons.Filled.Send" OnAdornmentClick="Execute" />
+            </MudItem>
+            <MudItem xs="3">
+                <div class="flex flex-row my-4">
+                    <MudChip Color="Color.Default">@Response?.Status</MudChip>
+                    <MudChip Color="Color.Default">@(Response?.ElapsedMs)ms</MudChip>
+                </div>
+            </MudItem>
+        </MudGrid>
+        <MudGrid Class="d-flex flex-grow-1">
+            <MudItem sm="12" md="6" Class="d-flex">
+                <GrpcRequest @bind-Request="Request" />
+            </MudItem>
+            <MudItem sm="12" md="6" Class="d-flex">
+                <GrpcResponse @bind-Response="Response" />
+            </MudItem>
+        </MudGrid>
+    </MudItem>
+</MudGrid>
+@code {
+    private SpacetimeResponse Response { get; set; } = new SpacetimeResponse();
+    public string Request { get; set; }
+    public string URL { get; set; } = "https://localhost:7186";
+    
+    [Parameter]
+    public GrpcServiceDefinition? Service { get; set; }
+    
+    [Parameter]
+    public GrpcMethodDefinition? Method { get; set; }
+
+    public void OpenAddProtobuf()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        DialogService.Show<AddProtoDialog>("Add Protobuf", options);
+    }
+
+    private bool CanExecute()
+    {
+        var valid = true;
+
+        if (string.IsNullOrWhiteSpace(Request))
+        {
+            Snackbar.Add("Request body is required.", Severity.Error);
+            valid = false;
+        }
+        
+        if (Method == null || string.IsNullOrWhiteSpace(Method.Name))
+        {
+            Snackbar.Add("Select a gRPC Method", Severity.Error);
+            valid = false;
+        }
+        else
+        {
+            var split = Method.Name.Split(".", StringSplitOptions.RemoveEmptyEntries);
+            if (split.Count() != 3)
+            {
+                Snackbar.Add($"Select a method for service {Service?.Name}", Severity.Error);
+                valid = false;
+            }
+        }
+
+        return valid;
+    }
+
+    public async Task Execute()
+    {
+        if (!CanExecute())
+        {
+            return;
+        }
+
+        // todo: validate json
+        Debug.Assert(Method != null);
+        var split = Method.Name.Split(".", StringSplitOptions.RemoveEmptyEntries);
+        var service = $"{split[0]}.{split[1]}";
+        var method = split[2];
+        var grpcResponse = await GrpcExplorer.Invoke(URL, service, method, Request);
+        Response = new SpacetimeResponse
+            {
+                ElapsedMs = grpcResponse.ElapsedMs,
+                ResponseBody = grpcResponse.ResponseBody,
+                Status = (SpacetimeStatus)grpcResponse.Status
+            };
+    }
+}

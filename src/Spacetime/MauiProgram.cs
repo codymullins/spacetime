@@ -1,17 +1,20 @@
 ﻿using Autofac;
-using Autofac.Builder;
 using Autofac.Extensions.DependencyInjection;
 using Spacetime.Core;
 using Spacetime.Core.gRPC;
 using Spacetime.Core.Services;
-using Spacetime.Core.Infrastructure;
 using Spacetime.Helpers;
 using MudBlazor.Services;
 using Serilog;
 using Fluxor;
+using Spacetime.Blazor.gRPC.Store;
 using Spacetime.Themes;
 using Spacetime.Core.Formatters;
 using Spacetime.Container;
+using Spacetime.Core.gRPC.Dynamic;
+using Spacetime.Core.gRPC.Interfaces;
+using Spacetime.Settings;
+using Spacetime.Store.Requests;
 
 namespace Spacetime;
 
@@ -45,8 +48,10 @@ public static class MauiProgram
         builder.Services.AddBlazorWebView();
         
         // add third party libraries
-        var assembly = typeof(MauiProgram).Assembly;
-        builder.Services.AddFluxor(options => options.ScanAssemblies(assembly));
+        builder.Services.AddFluxor(options => options.ScanAssemblies(
+            typeof(RequestState).Assembly, 
+            typeof(GrpcState).Assembly));
+
         builder.Services.AddMudServices();
 
         // register http clients
@@ -61,12 +66,13 @@ public static class MauiProgram
     private static void ConfigureContainer(ContainerBuilder builder)
     {
         builder.RegisterType<RequestService>();
-        builder.RegisterType<SettingsService>();
+        builder.RegisterType<SettingsService>().As<ISettingsService>();
         builder.RegisterType<SpacetimeRestService>().As<ISpacetimeService>();
         builder.RegisterType<UrlBuilder>();
         builder.RegisterType<DefaultTheme>();
         builder.RegisterType<ScriptUtils>();
         builder.RegisterType<GrpcExplorer>().As<IGrpcExplorer>();
+        builder.RegisterType<DynamicGrpcFactory>().As<IDynamicGrpcFactory>();
         builder.RegisterType<LiteDbProtobufService>().As<IProtobufService>();
 
         builder.RegisterType<FormatterFactory>().As<IFormatterFactory>();
